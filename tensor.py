@@ -1,5 +1,17 @@
 import numpy as np
 
+def unbroadcast(grad, shape):
+    # print(f"First grad.shape {grad.shape}, data.shape {shape}")
+    while len(grad.shape) > len(shape):
+        grad = grad.sum(axis=0)
+
+    for i, dim in enumerate(shape):
+        if dim == 1:
+            grad = grad.sum(axis=i, keepdims=True)
+
+    # print(f"Last grad.shape {grad.shape}, data.shape {shape}")
+    return grad
+
 class Tensor:
     def __init__(self, data, requires_grad=False, _children=()):
         self.data = np.array(data, dtype=np.float32)
@@ -16,9 +28,9 @@ class Tensor:
 
         def _backward():
             if self.requires_grad:
-                self.grad += out.grad
+                self.grad += unbroadcast(out.grad, self.grad.shape)
             if other.requires_grad:
-                other.grad += out.grad
+                other.grad += unbroadcast(out.grad, other.grad.shape)
 
         out._backward = _backward
         return out
@@ -32,9 +44,9 @@ class Tensor:
 
         def _backward():
             if self.requires_grad:
-                self.grad += out.grad
+                self.grad += unbroadcast(out.grad, self.grad.shape)
             if other.requires_grad:
-                other.grad -= out.grad
+                other.grad -= unbroadcast(out.grad, other.grad.shape)
 
         out._backward = _backward
         return out
@@ -58,9 +70,9 @@ class Tensor:
 
         def _backward():
             if self.requires_grad:
-                self.grad += other.data * out.grad
+                self.grad += unbroadcast(other.data, self.grad.shape) * unbroadcast(out.grad, self.grad.shape)
             if other.requires_grad:
-                other.grad += self.data * out.grad
+                other.grad += unbroadcast(self.data, other.grad.shape) * unbroadcast(out.grad, other.grad.shape)
 
         out._backward = _backward
         return out
@@ -74,9 +86,9 @@ class Tensor:
 
         def _backward():
             if self.requires_grad:
-                self.grad += (1 / other.data) * out.grad
+                self.grad += unbroadcast((1 / other.data), self.grad.shape) * unbroadcast(out.grad, self.grad.shape)
             if other.requires_grad:
-                other.grad += (-self.data / (other.data ** 2)) * out.grad
+                other.grad += unbroadcast((-self.data / (other.data ** 2)), other.grad.shape) * unbroadcast(out.grad, other.grad.shape)
 
         out._backward = _backward
         return out
