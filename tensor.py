@@ -114,7 +114,20 @@ class Tensor:
 
         out._backward = _backward
         return out
+    
 
+    def __matmul__(self, other):
+        out = Tensor(self.data @ other.data, requires_grad=self.requires_grad or other.requires_grad, _children=(self, other))
+
+        def _backward():
+            if self.requires_grad:
+                self.grad += out.grad @ other.data.T
+            if other.requires_grad:
+                other.grad += self.data.T @ out.grad
+
+        out._backward = _backward
+        return out
+    
 
     def sum(self, axis=None, keepdims=False):
         out_data = self.data.sum(axis=axis, keepdims=keepdims)
@@ -144,6 +157,75 @@ class Tensor:
         return out
 
 
+    def reshape(self, *shape):
+        out = Tensor(self.data.reshape(*shape), requires_grad=self.requires_grad, _children=(self,))
+
+        def _backward():
+            if self.requires_grad:
+                self.grad += out.grad.reshape(self.data.shape)
+
+        out._backward = _backward
+        return out
+
+
+    def permute(self, *axes):
+        out = Tensor(np.transpose(self.data, axes), requires_grad=self.requires_grad, _children=(self,))
+
+        def _backward():
+            if self.requires_grad:
+                reversed_axes = np.argsort(axes)
+                self.grad += np.transpose(out.grad, reversed_axes)
+
+        out._backward = _backward
+        return out
+
+
+    def flatten(self):
+        original_shape = self.data.shape
+        out = Tensor(self.data.flatten(), requires_grad=self.requires_grad, _children=(self,))
+
+        def _backward():
+            if self.requires_grad:
+                self.grad += out.grad.reshape(original_shape)
+
+        out._backward = _backward
+        return out
+
+
+    def expand(self, *shape):
+        out = Tensor(np.broadcast_to(self.data, shape), requires_grad=self.requires_grad, _children=(self,))
+
+        def _backward():
+            if self.requires_grad:
+                self.grad += unbroadcast(out.grad, self.data.shape)
+
+        out._backward = _backward
+        return out
+
+
+    def squeeze(self, axis=None):
+        original_shape = self.data.shape
+        out = Tensor(np.squeeze(self.data, axis=axis), requires_grad=self.requires_grad, _children=(self,))
+
+        def _backward():
+            if self.requires_grad:
+                self.grad += out.grad.reshape(original_shape)
+
+        out._backward = _backward
+        return out
+
+
+    def unsqueeze(self, axis):
+        out = Tensor(np.expand_dims(self.data, axis), requires_grad=self.requires_grad, _children=(self,))
+
+        def _backward():
+            if self.requires_grad:
+                self.grad += out.grad.reshape(self.data.shape)
+
+        out._backward = _backward
+        return out
+
+
     def backward(self):
         graph = []
         visited = set()
@@ -161,5 +243,6 @@ class Tensor:
         for t in reversed(graph):
             t._backward()
 
+
     def __repr__(self):
-        return f"Tensor(data={self.data}, grad={self.grad})"
+        return f"Tensor(data={self.data}\nGrad={self.grad})"
