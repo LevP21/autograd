@@ -1,7 +1,6 @@
 import numpy as np
 
 def unbroadcast(grad, shape):
-    # print(f"First grad.shape {grad.shape}, data.shape {shape}")
     while len(grad.shape) > len(shape):
         grad = grad.sum(axis=0)
 
@@ -9,7 +8,6 @@ def unbroadcast(grad, shape):
         if dim == 1:
             grad = grad.sum(axis=i, keepdims=True)
 
-    # print(f"Last grad.shape {grad.shape}, data.shape {shape}")
     return grad
 
 class Tensor:
@@ -21,6 +19,7 @@ class Tensor:
         self.shape = data.shape
         self._backward = lambda: None
         self._prev = set(_children)
+
 
     def __add__(self, other):
         other = other if isinstance(other, Tensor) else Tensor(other)
@@ -34,10 +33,12 @@ class Tensor:
 
         out._backward = _backward
         return out
-    
+
+
     def __radd__(self, other):
         return self + other
-    
+
+
     def __sub__(self, other):
         other = other if isinstance(other, Tensor) else Tensor(other)
         out = Tensor(self.data - other.data, requires_grad=self.requires_grad or other.requires_grad, _children=(self, other))
@@ -50,10 +51,12 @@ class Tensor:
 
         out._backward = _backward
         return out
-    
+
+
     def __rsub__(self, other):
         return self - other
-    
+
+
     def __neg__(self):
         out = Tensor(-self.data, requires_grad=self.requires_grad, _children=(self,))
 
@@ -63,6 +66,7 @@ class Tensor:
 
         out._backward = _backward
         return out
+
 
     def __mul__(self, other):
         other = other if isinstance(other, Tensor) else Tensor(other)
@@ -76,10 +80,12 @@ class Tensor:
 
         out._backward = _backward
         return out
-    
+
+
     def __rmul__(self, other):
         return self * other
-    
+
+
     def __truediv__(self, other):
         other = other if isinstance(other, Tensor) else Tensor(other)
         out = Tensor(self.data / other.data, requires_grad=self.requires_grad or other.requires_grad, _children=(self, other))
@@ -92,9 +98,11 @@ class Tensor:
 
         out._backward = _backward
         return out
-    
+
+
     def __rtruediv__(self, other):
         return self / other
+
 
     def __pow__(self, power):
         assert isinstance(power, (int, float))
@@ -106,6 +114,35 @@ class Tensor:
 
         out._backward = _backward
         return out
+
+
+    def sum(self, axis=None, keepdims=False):
+        out_data = self.data.sum(axis=axis, keepdims=keepdims)
+        out = Tensor(out_data, requires_grad=self.requires_grad, _children=(self,))
+
+        def _backward():
+            if self.requires_grad:
+                grad = out.grad
+                if not keepdims and axis is not None:
+                    grad = np.expand_dims(grad, axis=axis)
+                self.grad += np.broadcast_to(grad, self.data.shape)
+
+        out._backward = _backward
+        return out
+
+
+    def mean(self, axis=None, keepdims=False):
+        out_data = np.mean(self.data, axis=axis, keepdims=keepdims)
+        out = Tensor(out_data, requires_grad=self.requires_grad, _children=(self,))
+
+        def _backward():
+            if self.requires_grad:
+                grad = out.grad / np.prod(self.data.shape if axis is None else self.data.shape[axis])
+                self.grad += unbroadcast(grad, self.data.shape)
+
+        out._backward = _backward
+        return out
+
 
     def backward(self):
         graph = []
