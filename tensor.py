@@ -1,5 +1,6 @@
 import numpy as np
 
+
 def unbroadcast(grad, shape):
     while len(grad.shape) > len(shape):
         grad = grad.sum(axis=0)
@@ -10,15 +11,21 @@ def unbroadcast(grad, shape):
 
     return grad
 
+
 class Tensor:
     def __init__(self, data, requires_grad=False, _children=()):
         self.data = np.array(data, dtype=np.float32)
         self.grad = np.zeros_like(self.data)
         self.requires_grad = requires_grad
 
-        self.shape = data.shape
+        self.shape = self.data.shape
+        self.T = self.data.T
         self._backward = lambda: None
         self._prev = set(_children)
+
+    
+    def item(self):
+        return self.data
 
 
     def __add__(self, other):
@@ -155,6 +162,18 @@ class Tensor:
 
         out._backward = _backward
         return out
+    
+
+    def relu(self):
+        out_data = np.maximum(self.data, 0.0)
+        out = Tensor(out_data, requires_grad=self.requires_grad, _children=(self,))
+
+        def _backward():
+            if self.requires_grad:
+                self.grad += out.grad * (self.data > 0)
+
+        out._backward = _backward
+        return out
 
 
     def reshape(self, *shape):
@@ -230,18 +249,18 @@ class Tensor:
         graph = []
         visited = set()
 
-        def build_graph(t):
-            if t not in visited:
-                visited.add(t)
-                for child in t._prev:
+        def build_graph(tensor):
+            if tensor not in visited:
+                visited.add(tensor)
+                for child in tensor._prev:
                     build_graph(child)
-                graph.append(t)
+                graph.append(tensor)
         build_graph(self)
 
-        self.grad = np.ones_like(self.data)
+        print(self.data.shape, self.grad.shape)
 
-        for t in reversed(graph):
-            t._backward()
+        for tensor in reversed(graph):
+            tensor._backward()
 
 
     def __repr__(self):
