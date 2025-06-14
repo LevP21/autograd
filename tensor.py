@@ -2,11 +2,14 @@ import numpy as np
 
 
 def unbroadcast(grad, shape):
+    if grad.shape == ():
+        grad = np.full(shape, grad)
+
     while len(grad.shape) > len(shape):
         grad = grad.sum(axis=0)
 
     for i, dim in enumerate(shape):
-        if dim == 1:
+        if dim == 1 and grad.shape[i] != 1:
             grad = grad.sum(axis=i, keepdims=True)
 
     return grad
@@ -256,8 +259,6 @@ class Tensor:
                     build_graph(child)
                 graph.append(tensor)
         build_graph(self)
-
-        print(self.data.shape, self.grad.shape)
 
         for tensor in reversed(graph):
             tensor._backward()
