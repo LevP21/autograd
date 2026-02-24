@@ -24,7 +24,7 @@ class Tensor:
         self.shape = self.data.shape
         self.T = self.data.T
         self._backward = lambda: None
-        self._prev = set(_children)
+        self._previous = set(_children)
 
     
     def item(self):
@@ -137,7 +137,7 @@ class Tensor:
 
         out._backward = _backward
         return out
-    
+     
 
     def sum(self, axis=None, keepdims=False):
         out_data = self.data.sum(axis=axis, keepdims=keepdims)
@@ -175,6 +175,28 @@ class Tensor:
             if self.requires_grad:
                 self.grad += out.grad * (self.data > 0)
 
+        out._backward = _backward
+        return out
+    
+
+    def log(self):
+        out = Tensor(np.log(self.data), requires_grad=self.requires_grad, _children=(self,))
+
+        def _backward():
+            if self.requires_grad:
+                self.grad += (1 / self.data) * out.grad
+
+        out._backward = _backward
+        return out
+    
+
+    def exp(self):
+        out = Tensor(np.exp(self.data), requires_grad=self.requires_grad, _children=(self,))
+
+        def _backward():
+            if self.requires_grad:
+                self.grad += out.data * out.grad
+                
         out._backward = _backward
         return out
 
@@ -255,10 +277,12 @@ class Tensor:
         def build_graph(tensor):
             if tensor not in visited:
                 visited.add(tensor)
-                for child in tensor._prev:
+                for child in tensor._previous:
                     build_graph(child)
                 graph.append(tensor)
         build_graph(self)
+
+        self.grad = np.ones_like(self.data)
 
         for tensor in reversed(graph):
             tensor._backward()
