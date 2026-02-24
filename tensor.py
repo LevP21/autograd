@@ -29,6 +29,46 @@ class Tensor:
     
     def item(self):
         return self.data
+    
+
+    def __hash__(self):
+        return id(self)
+    
+
+    def __eq__(self, other):
+        other = other if isinstance(other, Tensor) else Tensor(other)
+
+        return self.data == other.data
+    
+
+    def __ne__(self, other):
+        other = other if isinstance(other, Tensor) else Tensor(other)
+
+        return self.data != other.data
+    
+
+    def __lt__(self, other):
+        other = other if isinstance(other, Tensor) else Tensor(other)
+
+        return self.data < other.data
+    
+
+    def __le__(self, other):
+        other = other if isinstance(other, Tensor) else Tensor(other)
+
+        return self.data <= other.data
+    
+
+    def __gt__(self, other):
+        other = other if isinstance(other, Tensor) else Tensor(other)
+
+        return self.data > other.data
+    
+
+    def __ge__(self, other):
+        other = other if isinstance(other, Tensor) else Tensor(other)
+
+        return self.data >= other.data
 
 
     def __add__(self, other):
