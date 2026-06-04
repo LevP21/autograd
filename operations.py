@@ -1,3 +1,5 @@
+from typing import Tuple
+
 import numpy as np
 
 from tensor import Tensor
@@ -367,3 +369,316 @@ def matmul(self: Tensor, other: Tensor) -> Tensor:
     return out
 
 Tensor.__matmul__ = matmul
+
+
+class Operator():
+    """
+    Class for operations with Tensors
+    """
+
+    def sum(self, t: Tensor, axis=None, keepdims=False) -> Tensor:
+        """
+        Calculates the sum of the tensor over the given axis
+
+        Args:
+            t (Tensor): Input tensor
+            axis (None or int or tuple of ints, optional): Axis or axes along which a sum is performed. The default, axis=None, will sum all of the elements of the input tensor. If axis is negative it counts from the last to the first axis.
+            keepdims (bool, optional): If this is set to True, the axes which are reduced are left in the result as dimensions with size one. With this option, the result will broadcast correctly against the input tensor.
+
+        Returns:
+            Tensor: Tensor after the sum function
+        """
+
+        out_data = t.data.sum(axis=axis, keepdims=keepdims)
+        out = Tensor(out_data, requires_grad=t.requires_grad, _children=(t,))
+
+        # leaves all gradients according to structure
+        def _backward():
+            if t.requires_grad:
+                grad = out.grad
+                if not keepdims and axis:
+                    # returns old dimensions to tensor
+                    grad = np.expand_dims(grad, axis=axis)
+                # broadcast the tensor to its old shape
+                t.grad += np.broadcast_to(grad, t.data.shape)
+
+        out._backward = _backward
+
+        return out
+
+
+    def mean(self, t: Tensor, axis=None, keepdims=False):
+        """
+        Calculates the mean of the tensor over the given axis
+
+        Args:
+            t (Tensor): Input tensor
+            axis (None or int or tuple of ints, optional): Axis or axes along which the means are computed. The default is to compute the mean of the flattened tensor.
+            keepdims (bool, optional): If this is set to True, the axes which are reduced are left in the result as dimensions with size one. With this option, the result will broadcast correctly against the input array.
+
+        Returns:
+            Tensor: Tensor after the mean function
+        """
+
+        out_data = np.mean(t.data, axis=axis, keepdims=keepdims)
+        out = Tensor(out_data, requires_grad=t.requires_grad, _children=(t,))
+        
+        # leaves all gradients according to structure
+        def _backward():
+            if t.requires_grad:
+                grad = out.grad
+                if not keepdims and axis:
+                    # returns old dimensions to tensor
+                    grad = np.expand_dims(grad, axis=axis)
+                # broadcast the tensor to its old shape
+                if axis:
+                    if isinstance(axis, Tuple):
+                        mean_count = sum((t.data.shape[ax] for ax in axis))
+                    else:
+                        mean_count = t.data.shape[axis]
+                else:
+                    mean_count = sum(t.data.shape)
+                t.grad += np.broadcast_to(grad, t.data.shape) / mean_count
+
+        out._backward = _backward
+
+        return out
+
+
+    def relu(self, t: Tensor) -> Tensor:
+        """
+        Equates all negative elements of the input tensor to zero
+
+        Args:
+            t (Tensor): Input tensor
+
+        Returns:
+            Tensor: Tensor after the RELU function
+        """
+        out_data = np.maximum(t.data, 0.0)
+
+        out = Tensor(out_data, requires_grad=t.requires_grad, _children=(t,))
+
+        # leaves all gradients where value is positive
+        def _backward():
+            if t.requires_grad:
+                t.grad += (t.data > 0) * out.grad
+
+        out._backward = _backward
+
+        return out
+
+
+    def log(self, t: Tensor) -> Tensor:
+        """
+        Calculate the natural logarithm of each element of the input tensor
+
+        Args:
+            t (Tensor): Input tensor
+
+        Returns:
+            Tensor: Tensor after the logarithm function
+        """
+        out = Tensor(np.log(t.data), requires_grad=t.requires_grad, _children=(t,))
+
+        # tabular derivative: d(ln(x)) = 1/x
+        def _backward():
+            if t.requires_grad:
+                t.grad += (1 / t.data) * out.grad
+
+        out._backward = _backward
+
+        return out
+
+
+    def exp(self, t: Tensor) -> Tensor:
+        """
+        Calculate the exponential function using the base constant e of each element of the input tensor
+
+        Args:
+            t (Tensor): Input tensor
+
+        Returns:
+            Tensor: Tensor after the exponential function
+        """
+        out = Tensor(np.exp(t.data), requires_grad=t.requires_grad, _children=(t,))
+
+        # tabular derivative: d(e^x) = e^x
+        def _backward():
+            if t.requires_grad:
+                t.grad += out.data * out.grad
+                
+        out._backward = _backward
+
+        return out
+    
+
+    def reshape(self, t: Tensor, *shape):
+        """
+        Method for changing the input tensor into a different shape
+
+        Args:
+            t (Tensor): Input tensor
+            shape (Tuple(int)): Shape the input tensor needs to be fit in
+        
+        Returns:
+            Tensor: Tensor with changed shape
+        """
+
+        out = Tensor(t.data.reshape(*shape), requires_grad=t.requires_grad, _children=(t,))
+        
+        def _backward():
+            # during backward we need to reshape the gradient of the output tensor into the shape of the input tensor
+            if t.requires_grad:
+                t.grad += out.grad.reshape(t.data.shape)
+
+        out._backward = _backward
+
+        return out
+
+
+    def permute(self, t: Tensor, *axes):
+        """
+        Method for changing order of axes of the input tensor
+
+        Args:
+            t (Tensor): Input tensor
+            axes (Tuple(int)): Order of the axes of the input tensor the output tensor needs to be with
+
+        Returns:
+            Tensor: Tensor with changed order of axes
+        """
+
+        out = Tensor(np.transpose(t.data, axes), requires_grad=t.requires_grad, _children=(t,))
+
+        def _backward():
+            # during backward we need to transpose the gradient of the output tensor into the axes order of the input tensor
+            if t.requires_grad:
+                reversed_axes = np.argsort(axes)
+                t.grad += np.transpose(out.grad, reversed_axes)
+
+        out._backward = _backward
+
+        return out
+
+
+    def flatten(self, t: Tensor):
+        """
+        Method for flattening a tensor into a vector
+
+        Args:
+            t (Tensor): Input tensor
+
+        Returns:
+            Tensor: Output one-dimensional tensor
+        """
+
+        # saving initial shape for reshaping back the gradient
+        original_shape = t.data.shape
+
+        out = Tensor(t.data.flatten(), requires_grad=t.requires_grad, _children=(t,))
+
+        def _backward():
+            if t.requires_grad:
+                t.grad += out.grad.reshape(original_shape)
+
+        out._backward = _backward
+
+        return out
+
+
+    def expand(self, t: Tensor, *shape):
+        """
+        Method for changing the input tensor to a larger shape
+
+        Args:
+            t (Tensor): Input tensor
+            shape (Tuple(int)): Shape the input tensor needs to be expanded to
+
+        Returns:
+            Tensor: Tensor with expanded shape
+        """
+
+        out = Tensor(np.broadcast_to(t.data, shape), requires_grad=t.requires_grad, _children=(t,))
+
+        def _backward():
+            # during backward we need to change back the gradient shape into the smaller shape of the input tensor
+            if t.requires_grad:
+                t.grad += unbroadcast(out.grad, t.data.shape)
+
+        out._backward = _backward
+
+        return out
+
+
+    def squeeze(self, t: Tensor, axis=None):
+        """
+        Method for removing axes of length 1 from the input tensor
+
+        Args:
+            t (Tensor): Input tensor
+            axis (None or int or Tuple(int)): Axes with lenght 1 which need to be removed from the input tensor
+
+        Returns:
+            Tensor: Tensor with removed axes
+        """
+
+        # saving initial shape for reshaping back the gradient
+        original_shape = t.data.shape
+
+        out = Tensor(np.squeeze(t.data, axis=axis), requires_grad=t.requires_grad, _children=(t,))
+
+        def _backward():
+            if t.requires_grad:
+                t.grad += out.grad.reshape(original_shape)
+
+        out._backward = _backward
+
+        return out
+
+
+    def unsqueeze(self, t: Tensor, axis):
+        """
+        Method for adding new dimensions to the input tensor
+
+        Args:
+            t (Tensor): Input tensor
+            axis (int or Tuple(int)): Positions where the new axes will be added
+
+        Returns:
+            Tensor: Tensor with added axes
+        """
+
+        out = Tensor(np.expand_dims(t.data, axis=axis), requires_grad=t.requires_grad, _children=(t,))
+
+        def _backward():
+            if t.requires_grad:
+                t.grad += out.grad.reshape(t.data.shape)
+
+        out._backward = _backward
+        
+        return out
+    
+
+    def clip(self, t: Tensor, min: float, max: float):
+        """
+        Clip the tensor from min to max
+
+        Args:
+            t (Tensor): The input tensor
+            min (float): Min number for tensor clipping
+            max (float): Max number for tensor clipping
+
+        Returns:
+            Tensor: Tensor with the clipped value
+        """
+
+        out = Tensor(data=np.clip(t.data, min, max), requires_grad=t.requires_grad, _children=(t._previous))
+
+        def _backward():
+            if t.requires_grad:
+                t.grad[(t.data >= min) & (t.data <= max)] += out.grad[(t.data >= min) & (t.data <= max)]
+
+        out._backward = _backward
+
+        return out
