@@ -526,9 +526,7 @@ class Operator():
         """
 
         if not t.is_contiguous():
-            raise RuntimeError(
-                "view requires contiguous tensor"
-            )
+            raise RuntimeError("view requires contiguous tensor")
 
         out = Tensor(t.data.reshape(*shape, copy=False), requires_grad=t.requires_grad, _children=(t,))
 
@@ -628,18 +626,41 @@ class Operator():
             Tensor: Output one-dimensional tensor
         """
 
-        # saving initial shape for reshaping back the gradient
-        original_shape = t.data.shape
-
         out = Tensor(t.data.flatten(), requires_grad=t.requires_grad, _children=(t,))
 
         def _backward():
             if t.requires_grad:
-                t.grad += out.grad.reshape(original_shape)
+                t.grad += out.grad.reshape(t.data.shape)
 
         out._backward = _backward
 
         return out
+
+
+    def unflatten(self, t: Tensor, dim: int, *sizes):
+        """
+        Method for changing a tensor dimension into a new shape
+
+        Args:
+            t (Tensor): Input tensor
+            dim (int): Dimension to unflatten
+            sizes (Tuple(int)): Shape the dimension needs to be fit in
+
+        Returns:
+            Tensor: Output tensor with new shape
+        """
+
+        shape = t.data.shape
+
+        if dim < 0:
+            dim += len(shape)
+
+        if not (0 <= dim < len(shape)):
+            raise IndexError("index out of range")
+
+        new_shape = shape[:dim] + sizes + shape[dim + 1:]
+
+        return self.reshape(t, *new_shape)
 
 
     def expand(self, t: Tensor, *shape):
@@ -678,14 +699,11 @@ class Operator():
             Tensor: Tensor with removed axes
         """
 
-        # saving initial shape for reshaping back the gradient
-        original_shape = t.data.shape
-
         out = Tensor(np.squeeze(t.data, axis=axis), requires_grad=t.requires_grad, _children=(t,))
 
         def _backward():
             if t.requires_grad:
-                t.grad += out.grad.reshape(original_shape)
+                t.grad += out.grad.reshape(t.data.shape)
 
         out._backward = _backward
 
