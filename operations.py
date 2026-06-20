@@ -513,9 +513,9 @@ class Operator():
         return out
     
 
-    def reshape(self, t: Tensor, *shape):
+    def view(self, t: Tensor, *shape):
         """
-        Method for changing the input tensor into a different shape
+        Method for changing the contiguous input tensor into a different shape
 
         Args:
             t (Tensor): Input tensor
@@ -525,8 +525,13 @@ class Operator():
             Tensor: Tensor with changed shape
         """
 
-        out = Tensor(t.data.reshape(*shape), requires_grad=t.requires_grad, _children=(t,))
-        
+        if not t.is_contiguous():
+            raise RuntimeError(
+                "view requires contiguous tensor"
+            )
+
+        out = Tensor(t.data.reshape(*shape, copy=False), requires_grad=t.requires_grad, _children=(t,))
+
         def _backward():
             # during backward we need to reshape the gradient of the output tensor into the shape of the input tensor
             if t.requires_grad:
@@ -535,6 +540,56 @@ class Operator():
         out._backward = _backward
 
         return out
+    
+
+    def view_as(self, t1: Tensor, t2: Tensor):
+        """
+        Method for changing the first contiguous input tensor into a shape of the second input tensor
+
+        Args:
+            t1 (Tensor): First input tensor
+            t2 (Tensor): Second input tensor
+        
+        Returns:
+            Tensor: Tensor with changed shape
+        """
+
+        return self.view(t1, t2.shape)
+    
+
+    def reshape(self, t: Tensor, *shape):
+        """
+        Method for changing the input tensor into a different shape
+        If tensor is contiguous, equal to view
+
+        Args:
+            t (Tensor): Input tensor
+            shape (Tuple(int)): Shape the input tensor needs to be fit in
+        
+        Returns:
+            Tensor: Tensor with changed shape
+        """
+
+        try:
+            return self.view(t, *shape)
+        except RuntimeError:
+            return self.view(t.contiguous(), *shape)
+        
+
+    def reshape_as(self, t1: Tensor, t2: Tensor):
+        """
+        Method for changing the first input tensor into a shape of the second input tensor
+        If tensor is contiguous, equal to view
+
+        Args:
+            t1 (Tensor): First input tensor
+            t2 (Tensor): Second input tensor
+        
+        Returns:
+            Tensor: Tensor with changed shape
+        """
+
+        return self.reshape(t1, t2.shape)
 
 
     def permute(self, t: Tensor, *axes):
