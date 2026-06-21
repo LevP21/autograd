@@ -35,6 +35,7 @@ class Tensor:
         # reinitializations of bacis methods using numpy array value
         self.shape = self.data.shape
         self.T = self.data.T
+        self.ndim = self.data.ndim
 
         self._backward = lambda: None
         self._previous = set(_children)

@@ -400,7 +400,7 @@ class Operator():
                     # returns old dimensions to tensor
                     grad = np.expand_dims(grad, axis=axis)
                 # broadcast the tensor to its old shape
-                t.grad += np.broadcast_to(grad, t.data.shape)
+                t.grad += np.broadcast_to(grad, t.shape)
 
         out._backward = _backward
 
@@ -433,12 +433,12 @@ class Operator():
                 # broadcast the tensor to its old shape
                 if axis:
                     if isinstance(axis, Tuple):
-                        mean_count = sum((t.data.shape[ax] for ax in axis))
+                        mean_count = sum((t.shape[ax] for ax in axis))
                     else:
-                        mean_count = t.data.shape[axis]
+                        mean_count = t.shape[axis]
                 else:
-                    mean_count = sum(t.data.shape)
-                t.grad += np.broadcast_to(grad, t.data.shape) / mean_count
+                    mean_count = sum(t.shape)
+                t.grad += np.broadcast_to(grad, t.shape) / mean_count
 
         out._backward = _backward
 
@@ -533,7 +533,7 @@ class Operator():
         def _backward():
             # during backward we need to reshape the gradient of the output tensor into the shape of the input tensor
             if t.requires_grad:
-                t.grad += out.grad.reshape(t.data.shape)
+                t.grad += out.grad.reshape(t.shape)
 
         out._backward = _backward
 
@@ -588,7 +588,142 @@ class Operator():
         """
 
         return self.reshape(t1, t2.shape)
+    
 
+    def t(self, t: Tensor):
+        """
+        Method for transposing the input tensor
+
+        Args:
+            t (Tensor): Input tensor
+
+        Returns:
+            Tensor: Transposed tensor
+        """
+
+        if t.ndim <= 1:
+            return t
+
+        if t.ndim != 2:
+            raise RuntimeError(
+                "t() expects a tensor with <= 2 dimensions"
+            )
+
+        return self.transpose(t, 0, 1)
+    
+
+    def transpose(self, t: Tensor, dim0: int, dim1: int):
+        """
+        Method for swapping two of axes of the input tensor
+
+        Args:
+            t (Tensor): Input tensor
+            dim0 (int): First dimension to swap
+            dim1 (int): Second dimension to swap
+
+        Returns:
+            Tensor: Tensor with two axes swapped
+        """
+
+        axes = list(range(t.ndim))
+        axes[dim0], axes[dim1] = axes[dim1], axes[dim0]
+
+        return self.permute(t, *axes)
+    
+
+    def swapaxes(self, t: Tensor, dim0: int, dim1: int):
+        """
+        Method for swapping two of axes of the input tensor
+
+        Args:
+            t (Tensor): Input tensor
+            dim0 (int): First dimension to swap
+            dim1 (int): Second dimension to swap
+
+        Returns:
+            Tensor: Tensor with two axes swapped
+        """
+
+        return self.transpose(t, dim0, dim1)
+    
+
+    def movedim(self, t: Tensor, source, destination):
+        """
+        Method for moving axes of the input tensor to new position
+
+        Args:
+            t (Tensor): Input tensor
+            source (Tuple(int)): Indices of dimensions to move
+            destination (Tuple(int)): Indices for insertion of dimensions
+
+        Returns:
+            Tensor: Tensor with moved dimensions
+        """
+
+        ndim = t.ndim
+
+        if isinstance(source, int):
+            source = (source,)
+
+        if isinstance(destination, int):
+            destination = (destination,)
+
+        if len(source) != len(destination):
+            raise ValueError(
+                "source and destination must have the same number of dimensions"
+            )
+        
+        source_norm = []
+        destination_norm = []
+
+        for s, d in zip(source, destination):
+            if not (-ndim <= s < ndim) or not (-ndim <= d < ndim):
+                raise IndexError("index out of range")
+            
+            source_norm.append(s % ndim)
+            destination_norm.append(d % ndim)
+
+        if len(source_norm) != len(set(source_norm)):
+            raise ValueError(
+                "source must not have the repeated indices"
+            )
+        
+        if len(destination_norm) != len(set(destination_norm)):
+            raise ValueError(
+                "destination must not have the repeated indices"
+            )
+
+        remaining = [i for i in range(ndim) if i not in source]
+
+        permutation = [None] * ndim
+
+        for s, d in zip(source_norm, destination_norm):
+            permutation[d] = s
+
+        remaining_it = iter(remaining)
+
+        for i in range(ndim):
+            if permutation[i] is None:
+                permutation[i] = next(remaining_it)
+
+        return self.permute(t, *permutation)
+    
+
+    def moveaxis(self, t: Tensor, source, destination):
+        """
+        Method for moving axes of the input tensor to new position
+
+        Args:
+            t (Tensor): Input tensor
+            source (Tuple(int)): Indices of dimensions to move
+            destination (Tuple(int)): Indices for insertion of dimensions
+
+        Returns:
+            Tensor: Tensor with moved dimensions
+        """
+
+        return self.movedim(t, source, destination)
+    
 
     def permute(self, t: Tensor, *axes):
         """
@@ -630,7 +765,7 @@ class Operator():
 
         def _backward():
             if t.requires_grad:
-                t.grad += out.grad.reshape(t.data.shape)
+                t.grad += out.grad.reshape(t.shape)
 
         out._backward = _backward
 
@@ -650,7 +785,7 @@ class Operator():
             Tensor: Output tensor with new shape
         """
 
-        shape = t.data.shape
+        shape = t.shape
 
         if dim < 0:
             dim += len(shape)
@@ -680,7 +815,7 @@ class Operator():
         def _backward():
             # during backward we need to change back the gradient shape into the smaller shape of the input tensor
             if t.requires_grad:
-                t.grad += unbroadcast(out.grad, t.data.shape)
+                t.grad += unbroadcast(out.grad, t.shape)
 
         out._backward = _backward
 
@@ -703,7 +838,7 @@ class Operator():
 
         def _backward():
             if t.requires_grad:
-                t.grad += out.grad.reshape(t.data.shape)
+                t.grad += out.grad.reshape(t.shape)
 
         out._backward = _backward
 
@@ -726,7 +861,7 @@ class Operator():
 
         def _backward():
             if t.requires_grad:
-                t.grad += out.grad.reshape(t.data.shape)
+                t.grad += out.grad.reshape(t.shape)
 
         out._backward = _backward
         
