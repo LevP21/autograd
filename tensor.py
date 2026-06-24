@@ -71,6 +71,20 @@ class Tensor:
         return id(self)
     
 
+    def __len__(self):
+        """
+        Return length of a tensor
+
+        Args:
+            None
+
+        Returns:
+            int: Length of a tensor
+        """
+        
+        return len(self.data)
+    
+
     def is_contiguous(self):
         """
         Identify if the tensor has a contiguous area in memory
