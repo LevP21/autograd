@@ -785,13 +785,13 @@ class Operator():
             Tensor: Output tensor with new shape
         """
 
+        ndim = t.ndim
         shape = t.shape
 
-        if dim < 0:
-            dim += len(shape)
-
-        if not (0 <= dim < len(shape)):
+        if not (-ndim <= dim < ndim):
             raise IndexError("index out of range")
+        
+        dim %= t.ndim
 
         new_shape = shape[:dim] + sizes + shape[dim + 1:]
 
@@ -866,6 +866,97 @@ class Operator():
         out._backward = _backward
         
         return out
+    
+
+    def split(self, t: Tensor, split_size_or_sections, dim: int = 0):
+        """
+        Method for splitting the tensor into multiple ones along one dimension
+
+        Args:
+            t (Tensor): Input tensor
+            split_size_or_sections (int or Tuple(int)): Size of every chunk for splitting or range of sizes for all chunks
+            dim (int): Dimension the tensor is splitted along
+
+        Returns:
+            Tuple(Tensor): Tuple with views of initial tensor
+        """
+
+        ndim = t.ndim
+
+        if not (-ndim <= dim < ndim):
+            raise IndexError("index out of range")
+        
+        dim %= t.ndim
+
+        chunks = []
+
+        if isinstance(split_size_or_sections, int):
+            start = 0
+
+            while start < t.shape[dim]:
+                stop = min(start + split_size_or_sections, t.shape[dim])
+
+                slices = [slice(None)] * t.ndim
+                slices[dim] = slice(start, stop)
+
+                tensor = Tensor(t.data[tuple(slices)], requires_grad=t.requires_grad, _children=(t,))
+
+                def _backward(tensor=tensor, slices=tuple(slices)):
+                    if t.requires_grad:
+                        t.grad[slices] += tensor.grad
+
+                tensor._backward = _backward
+
+                chunks.append(tensor)
+
+                start = stop
+        else:
+            if sum(split_size_or_sections) != t.shape[dim]:
+                raise ValueError("sum of sections must match the size of dimension")
+
+            start = 0
+            stop = 0
+
+            for size in split_size_or_sections:
+                stop += size
+                
+                slices = [slice(None)] * t.ndim
+                slices[dim] = slice(start, stop)
+
+                tensor = Tensor(t.data[tuple(slices)], requires_grad=t.requires_grad, _children=(t,))
+
+                def _backward(tensor=tensor, slices=tuple(slices)):
+                    if t.requires_grad:
+                        t.grad[slices] += tensor.grad
+
+                tensor._backward = _backward
+
+                chunks.append(tensor)
+
+                start = stop
+        
+        return tuple(chunks)
+    
+
+    def chunk(self, t: Tensor, chunks: int, dim: int = 0):
+        """
+        Method for splitting the tensor into multiple ones along one dimension
+
+        Args:
+            t (Tensor): Input tensor
+            chunks (int): Number of chunks for splitting
+            dim (int): Dimension the tensor is splitted along
+
+        Returns:
+            Tuple(Tensor): Tuple with views of initial tensor
+        """
+
+        if chunks <= 0:
+            raise ValueError("number of chunks must be positive")
+        
+        chunk_size = int(np.ceil(t.shape[dim] / chunks))
+
+        return self.split(t, chunk_size, dim)
     
 
     def clip(self, t: Tensor, min: float, max: float):
