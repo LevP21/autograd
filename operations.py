@@ -513,13 +513,58 @@ class Operator():
         return out
     
 
+    def clip(self, t: Tensor, min: float, max: float):
+        """
+        Clip the tensor from min to max
+
+        Args:
+            t (Tensor): The input tensor
+            min (float): Min number for tensor clipping
+            max (float): Max number for tensor clipping
+
+        Returns:
+            Tensor: Tensor with the clipped value
+        """
+
+        out = Tensor(data=np.clip(t.data, min, max), requires_grad=t.requires_grad, _children=(t._previous))
+
+        def _backward():
+            if t.requires_grad:
+                t.grad[(t.data >= min) & (t.data <= max)] += out.grad[(t.data >= min) & (t.data <= max)]
+
+        out._backward = _backward
+
+        return out
+    
+
+    def contiguous(self, t: Tensor):
+        """
+        Make the tensor have a contiguous area in memory
+
+        Args:
+            t (Tensor): Input tensor
+
+        Returns:
+            Tensor: contiguous tensor with initial data
+        """
+
+        if t.is_contiguous():
+            return t
+        
+        out = Tensor(data=np.ascontiguousarray(t.data), requires_grad=t.requires_grad, _children=t._previous)
+
+        out._backward = t._backward
+        
+        return out
+    
+
     def view(self, t: Tensor, *shape):
         """
         Method for changing the contiguous input tensor into a different shape
 
         Args:
             t (Tensor): Input tensor
-            shape (Tuple(int)): Shape the input tensor needs to be fit in
+            shape (Tuple[int]): Shape the input tensor needs to be fit in
         
         Returns:
             Tensor: Tensor with changed shape
@@ -562,7 +607,7 @@ class Operator():
 
         Args:
             t (Tensor): Input tensor
-            shape (Tuple(int)): Shape the input tensor needs to be fit in
+            shape (Tuple[int]): Shape the input tensor needs to be fit in
         
         Returns:
             Tensor: Tensor with changed shape
@@ -571,7 +616,7 @@ class Operator():
         try:
             return self.view(t, *shape)
         except RuntimeError:
-            return self.view(t.contiguous(), *shape)
+            return self.view(self.contiguous(t), *shape)
         
 
     def reshape_as(self, t1: Tensor, t2: Tensor):
@@ -653,8 +698,8 @@ class Operator():
 
         Args:
             t (Tensor): Input tensor
-            source (Tuple(int)): Indices of dimensions to move
-            destination (Tuple(int)): Indices for insertion of dimensions
+            source (Tuple[int]): Indices of dimensions to move
+            destination (Tuple[int]): Indices for insertion of dimensions
 
         Returns:
             Tensor: Tensor with moved dimensions
@@ -715,8 +760,8 @@ class Operator():
 
         Args:
             t (Tensor): Input tensor
-            source (Tuple(int)): Indices of dimensions to move
-            destination (Tuple(int)): Indices for insertion of dimensions
+            source (Tuple[int]): Indices of dimensions to move
+            destination (Tuple[int]): Indices for insertion of dimensions
 
         Returns:
             Tensor: Tensor with moved dimensions
@@ -731,7 +776,7 @@ class Operator():
 
         Args:
             t (Tensor): Input tensor
-            axes (Tuple(int)): Order of the axes of the input tensor the output tensor needs to be with
+            axes (Tuple[int]): Order of the axes of the input tensor the output tensor needs to be with
 
         Returns:
             Tensor: Tensor with changed order of axes
@@ -779,7 +824,7 @@ class Operator():
         Args:
             t (Tensor): Input tensor
             dim (int): Dimension to unflatten
-            sizes (Tuple(int)): Shape the dimension needs to be fit in
+            sizes (Tuple[int]): Shape the dimension needs to be fit in
 
         Returns:
             Tensor: Output tensor with new shape
@@ -804,7 +849,7 @@ class Operator():
 
         Args:
             t (Tensor): Input tensor
-            shape (Tuple(int)): Shape the input tensor needs to be expanded to
+            shape (Tuple[int]): Shape the input tensor needs to be expanded to
 
         Returns:
             Tensor: Tensor with expanded shape
@@ -828,7 +873,7 @@ class Operator():
 
         Args:
             t (Tensor): Input tensor
-            axis (None or int or Tuple(int)): Axes with lenght 1 which need to be removed from the input tensor
+            axis (None or int or Tuple[int]): Axes with lenght 1 which need to be removed from the input tensor
 
         Returns:
             Tensor: Tensor with removed axes
@@ -851,7 +896,7 @@ class Operator():
 
         Args:
             t (Tensor): Input tensor
-            axis (int or Tuple(int)): Positions where the new axes will be added
+            axis (int or Tuple[int]): Positions where the new axes will be added
 
         Returns:
             Tensor: Tensor with added axes
@@ -874,11 +919,11 @@ class Operator():
 
         Args:
             t (Tensor): Input tensor
-            split_size_or_sections (int or Tuple(int)): Size of every chunk for splitting or range of sizes for all chunks
-            dim (int): Dimension the tensor is splitted along
+            split_size_or_sections (int or Tuple[int]): Size of every chunk for splitting or range of sizes for all chunks
+            dim (int): Dimension the tensor is being splitted along
 
         Returns:
-            Tuple(Tensor): Tuple with views of initial tensor
+            Tuple[Tensor]: Tuple with views of initial tensor
         """
 
         ndim = t.ndim
@@ -945,10 +990,10 @@ class Operator():
         Args:
             t (Tensor): Input tensor
             chunks (int): Number of chunks for splitting
-            dim (int): Dimension the tensor is splitted along
+            dim (int): Dimension the tensor is being splitted along
 
         Returns:
-            Tuple(Tensor): Tuple with views of initial tensor
+            Tuple[Tensor]: Tuple with views of initial tensor
         """
 
         if chunks <= 0:
@@ -957,27 +1002,123 @@ class Operator():
         chunk_size = int(np.ceil(t.shape[dim] / chunks))
 
         return self.split(t, chunk_size, dim)
-    
 
-    def clip(self, t: Tensor, min: float, max: float):
+
+    def cat(self, tensors: Tuple[Tensor], dim: int = 0):
         """
-        Clip the tensor from min to max
+        Method for concatenating tuple of tensors into one tensor along one dimension
 
         Args:
-            t (Tensor): The input tensor
-            min (float): Min number for tensor clipping
-            max (float): Max number for tensor clipping
+            tensors (Tuple[Tensor]): Tuple of input tensors
+            dim (int): Dimension the tensors are being concatenated along
 
         Returns:
-            Tensor: Tensor with the clipped value
+            Tensor: Output tensor with view of concatenated initial tensors
         """
 
-        out = Tensor(data=np.clip(t.data, min, max), requires_grad=t.requires_grad, _children=(t._previous))
+        out = Tensor(
+            data=np.concatenate([tensor.data for tensor in tensors], axis=dim),
+            requires_grad=bool(np.any([tensor.requires_grad for tensor in tensors])),
+            _children=tensors
+        )
 
         def _backward():
-            if t.requires_grad:
-                t.grad[(t.data >= min) & (t.data <= max)] += out.grad[(t.data >= min) & (t.data <= max)]
+            start = 0
+            stop = 0
+
+            for tensor in tensors:
+                stop += tensor.shape[dim]
+
+                slices = [slice(None)] * tensor.ndim
+                slices[dim] = slice(start, stop)
+
+                if tensor.requires_grad:
+                    tensor.grad += out.grad[tuple(slices)]
+
+                start = stop
 
         out._backward = _backward
 
         return out
+    
+    def stack(self, tensors: Tuple[Tensor], dim: int = 0):
+        """
+        Method for stacking tuple of tensors into one tensor along a new dimension
+
+        Args:
+            tensors (Tuple[Tensor]): Tuple of input tensors
+            dim (int): New dimension the tensors are being stacked along
+
+        Returns:
+            Tensor: Output tensor with view of stacked initial tensors
+        """
+
+        unsqueezed_tensors = tuple(self.unsqueeze(tensor, axis=dim) for tensor in tensors)
+
+        return self.cat(unsqueezed_tensors, dim)
+    
+    def vstack(self, tensors: Tuple[Tensor]):
+        """
+        Method for stacking tuple of tensors into one tensor along vertical dimension
+
+        Args:
+            tensors (Tuple[Tensor]): Tuple of input tensors
+
+        Returns:
+            Tensor: Output tensor with view of stacked initial tensors
+        """
+
+        reshaped_tensors = []
+        
+        # we need to stack along the vertical dimension H, so the tensors must have a shape at least (H, W)
+        for tensor in tensors:
+            # if a tensor have only one dimension (W,) we need to add dimension H to have necessary shape (1, W)
+            if tensor.ndim == 1:
+                reshaped_tensors.append(self.unsqueeze(tensor, axis=0))
+            else:
+                reshaped_tensors.append(tensor)
+
+        return self.cat(tuple(reshaped_tensors), dim=0)
+    
+    def hstack(self, tensors: Tuple[Tensor]):
+        """
+        Method for stacking tuple of tensors into one tensor along horizontal dimension
+
+        Args:
+            tensors (Tuple[Tensor]): Tuple of input tensors
+
+        Returns:
+            Tensor: Output tensor with view of stacked initial tensors
+        """
+
+        # we need to stack along the horisontal dimension W, so a shape (W,) is enough for operation
+        if tensors[0].ndim == 1:
+            return self.cat(tensors, dim=0)
+        else:
+            return self.cat(tensors, dim=1)
+    
+    def dstack(self, tensors: Tuple[Tensor]):
+        """
+        Method for stacking tuple of tensors into one tensor along depth dimension
+
+        Args:
+            tensors (Tuple[Tensor]): Tuple of input tensors
+
+        Returns:
+            Tensor: Output tensor with view of stacked initial tensors
+        """
+
+        reshaped_tensors = []
+
+        # we need to stack along the depth dimension D, so the tensors must have a shape at least (H, W, D)
+        for tensor in tensors:
+            # if a tensor have only one dimension (W,) we need to add dimensions H and D to have necessary shape (1, W, 1)
+            if tensor.ndim == 1:
+                reshaped_tensors.append(self.unsqueeze(self.unsqueeze(tensor, axis=0), axis=2))
+            # if a tensor have only two dimensions (H, W) we need to add dimension D to have necessary shape (H, W, 1)
+            elif tensor.ndim == 2:
+                reshaped_tensors.append(self.unsqueeze(tensor, axis=2))
+            else:
+                reshaped_tensors.append(tensor)
+
+        return self.cat(tuple(reshaped_tensors), dim=2)

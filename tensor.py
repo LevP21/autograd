@@ -97,27 +97,6 @@ class Tensor:
         """
 
         return self.data.flags.c_contiguous
-    
-
-    def contiguous(self):
-        """
-        Make the tensor have a contiguous area in memory
-
-        Args:
-            None
-
-        Returns:
-            Tensor: contiguous tensor with initial data
-        """
-
-        if self.is_contiguous():
-            return self
-        
-        out = Tensor(data=np.ascontiguousarray(self.data), requires_grad=self.requires_grad, _children=self._previous)
-
-        out._backward = self._backward
-        
-        return out
 
 
     def backward(self):
