@@ -382,7 +382,7 @@ class Operator():
 
         Args:
             t (Tensor): Input tensor
-            axis (None or int or tuple of ints, optional): Axis or axes along which a sum is performed. The default, axis=None, will sum all of the elements of the input tensor. If axis is negative it counts from the last to the first axis.
+            axis (None or int or tuple of int, optional): Axis or axes along which a sum is performed. The default, axis=None, will sum all of the elements of the input tensor. If axis is negative it counts from the last to the first axis.
             keepdims (bool, optional): If this is set to True, the axes which are reduced are left in the result as dimensions with size one. With this option, the result will broadcast correctly against the input tensor.
 
         Returns:
@@ -413,7 +413,7 @@ class Operator():
 
         Args:
             t (Tensor): Input tensor
-            axis (None or int or tuple of ints, optional): Axis or axes along which the means are computed. The default is to compute the mean of the flattened tensor.
+            axis (None or int or tuple of int, optional): Axis or axes along which the means are computed. The default is to compute the mean of the flattened tensor.
             keepdims (bool, optional): If this is set to True, the axes which are reduced are left in the result as dimensions with size one. With this option, the result will broadcast correctly against the input array.
 
         Returns:
@@ -1002,6 +1002,76 @@ class Operator():
         chunk_size = int(np.ceil(t.shape[dim] / chunks))
 
         return self.split(t, chunk_size, dim)
+    
+
+    def atleast_1d(self, *tensors: Tensor):
+        """
+        Method for reshaping tensor into at least one-dimensional tensor. If tensor has 1 or more dimensions, doesn't change an initial tensor
+
+        Args:
+            tensors (Tensor or sequense of Tensor): Input tensors
+
+        Returns:
+            (Tuple[Tensor]): Tensors with at least one dimension
+        """
+
+        atleast_1d_tensors = []
+
+        for tensor in tensors:
+            if tensor.ndim < 1:
+                tensor = self.unsqueeze(tensor, axis=0)
+
+            atleast_1d_tensors.append(tensor)
+
+        return tuple(atleast_1d_tensors)
+    
+
+    def atleast_2d(self, *tensors: Tensor):
+        """
+        Method for reshaping tensor into at least two-dimensional tensor. If tensor has 2 or more dimensions, doesn't change an initial tensor
+
+        Args:
+            tensors (Tensor or sequense of Tensor): Input tensors
+
+        Returns:
+            (Tuple[Tensor]): Tensors with at least two dimensions
+        """
+
+        atleast_2d_tensors = []
+
+        tensors = self.atleast_1d(*tensors)
+
+        for tensor in tensors:
+            if tensor.ndim == 1:
+                tensor = self.unsqueeze(tensor, axis=0)
+
+            atleast_2d_tensors.append(tensor)
+
+        return tuple(atleast_2d_tensors)
+    
+
+    def atleast_3d(self, *tensors: Tensor):
+        """
+        Method for reshaping tensor into at least three-dimensional tensor. If tensor has 3 or more dimensions, doesn't change an initial tensor
+
+        Args:
+            tensors (Tensor or sequense of Tensor): Input tensors
+
+        Returns:
+            (Tuple[Tensor]): Tensors with at least three dimensions
+        """
+
+        atleast_3d_tensors = []
+
+        tensors = self.atleast_2d(*tensors)
+
+        for tensor in tensors:
+            if tensor.ndim == 2:
+                tensor = self.unsqueeze(tensor, axis=-1)
+
+            atleast_3d_tensors.append(tensor)
+
+        return tuple(atleast_3d_tensors)
 
 
     def cat(self, tensors: Tuple[Tensor], dim: int = 0):
@@ -1067,18 +1137,11 @@ class Operator():
         Returns:
             Tensor: Output tensor with view of stacked initial tensors
         """
-
-        reshaped_tensors = []
         
         # we need to stack along the vertical dimension H, so the tensors must have a shape at least (H, W)
-        for tensor in tensors:
-            # if a tensor have only one dimension (W,) we need to add dimension H to have necessary shape (1, W)
-            if tensor.ndim == 1:
-                reshaped_tensors.append(self.unsqueeze(tensor, axis=0))
-            else:
-                reshaped_tensors.append(tensor)
+        tensors = self.atleast_2d(*tensors)
 
-        return self.cat(tuple(reshaped_tensors), dim=0)
+        return self.cat(tuple(tensors), dim=0)
     
     def hstack(self, tensors: Tuple[Tensor]):
         """
@@ -1092,6 +1155,8 @@ class Operator():
         """
 
         # we need to stack along the horisontal dimension W, so a shape (W,) is enough for operation
+        tensors = self.atleast_1d(*tensors)
+
         if tensors[0].ndim == 1:
             return self.cat(tensors, dim=0)
         else:
@@ -1108,17 +1173,7 @@ class Operator():
             Tensor: Output tensor with view of stacked initial tensors
         """
 
-        reshaped_tensors = []
-
         # we need to stack along the depth dimension D, so the tensors must have a shape at least (H, W, D)
-        for tensor in tensors:
-            # if a tensor have only one dimension (W,) we need to add dimensions H and D to have necessary shape (1, W, 1)
-            if tensor.ndim == 1:
-                reshaped_tensors.append(self.unsqueeze(self.unsqueeze(tensor, axis=0), axis=2))
-            # if a tensor have only two dimensions (H, W) we need to add dimension D to have necessary shape (H, W, 1)
-            elif tensor.ndim == 2:
-                reshaped_tensors.append(self.unsqueeze(tensor, axis=2))
-            else:
-                reshaped_tensors.append(tensor)
+        tensors = self.atleast_3d(*tensors)
 
-        return self.cat(tuple(reshaped_tensors), dim=2)
+        return self.cat(tuple(tensors), dim=2)
