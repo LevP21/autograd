@@ -382,7 +382,7 @@ class Operator():
 
         Args:
             t (Tensor): Input tensor
-            axis (None or int or tuple of int, optional): Axis or axes along which a sum is performed. The default, axis=None, will sum all of the elements of the input tensor. If axis is negative it counts from the last to the first axis.
+            axis (None or int or Tuple[int], optional): Axis or axes along which a sum is performed. The default, axis=None, will sum all of the elements of the input tensor. If axis is negative it counts from the last to the first axis.
             keepdims (bool, optional): If this is set to True, the axes which are reduced are left in the result as dimensions with size one. With this option, the result will broadcast correctly against the input tensor.
 
         Returns:
@@ -413,7 +413,7 @@ class Operator():
 
         Args:
             t (Tensor): Input tensor
-            axis (None or int or tuple of int, optional): Axis or axes along which the means are computed. The default is to compute the mean of the flattened tensor.
+            axis (None or int or Tuple[int], optional): Axis or axes along which the means are computed. The default is to compute the mean of the flattened tensor.
             keepdims (bool, optional): If this is set to True, the axes which are reduced are left in the result as dimensions with size one. With this option, the result will broadcast correctly against the input array.
 
         Returns:
@@ -1009,7 +1009,7 @@ class Operator():
         Method for reshaping tensor into at least one-dimensional tensor. If tensor has 1 or more dimensions, doesn't change an initial tensor
 
         Args:
-            tensors (Tensor or sequense of Tensor): Input tensors
+            tensors (Tensor or Sequense of Tensor): Input tensors
 
         Returns:
             (Tuple[Tensor]): Tensors with at least one dimension
@@ -1031,7 +1031,7 @@ class Operator():
         Method for reshaping tensor into at least two-dimensional tensor. If tensor has 2 or more dimensions, doesn't change an initial tensor
 
         Args:
-            tensors (Tensor or sequense of Tensor): Input tensors
+            tensors (Tensor or Sequense of Tensor): Input tensors
 
         Returns:
             (Tuple[Tensor]): Tensors with at least two dimensions
@@ -1055,7 +1055,7 @@ class Operator():
         Method for reshaping tensor into at least three-dimensional tensor. If tensor has 3 or more dimensions, doesn't change an initial tensor
 
         Args:
-            tensors (Tensor or sequense of Tensor): Input tensors
+            tensors (Tensor or Sequense of Tensor): Input tensors
 
         Returns:
             (Tuple[Tensor]): Tensors with at least three dimensions
@@ -1083,7 +1083,7 @@ class Operator():
             dim (int): Dimension the tensors are being concatenated along
 
         Returns:
-            Tensor: Output tensor with view of concatenated initial tensors
+            Tensor: Tensor with view of concatenated initial tensors
         """
 
         out = Tensor(
@@ -1111,6 +1111,7 @@ class Operator():
 
         return out
     
+    
     def stack(self, tensors: Tuple[Tensor], dim: int = 0):
         """
         Method for stacking tuple of tensors into one tensor along a new dimension
@@ -1120,12 +1121,13 @@ class Operator():
             dim (int): New dimension the tensors are being stacked along
 
         Returns:
-            Tensor: Output tensor with view of stacked initial tensors
+            Tensor: Tensor with view of stacked initial tensors
         """
 
         unsqueezed_tensors = tuple(self.unsqueeze(tensor, axis=dim) for tensor in tensors)
 
         return self.cat(unsqueezed_tensors, dim)
+    
     
     def vstack(self, tensors: Tuple[Tensor]):
         """
@@ -1135,13 +1137,14 @@ class Operator():
             tensors (Tuple[Tensor]): Tuple of input tensors
 
         Returns:
-            Tensor: Output tensor with view of stacked initial tensors
+            Tensor: Tensor with view of stacked initial tensors
         """
         
         # we need to stack along the vertical dimension H, so the tensors must have a shape at least (H, W)
         tensors = self.atleast_2d(*tensors)
 
         return self.cat(tuple(tensors), dim=0)
+    
     
     def hstack(self, tensors: Tuple[Tensor]):
         """
@@ -1151,7 +1154,7 @@ class Operator():
             tensors (Tuple[Tensor]): Tuple of input tensors
 
         Returns:
-            Tensor: Output tensor with view of stacked initial tensors
+            Tensor: Tensor with view of stacked initial tensors
         """
 
         # we need to stack along the horisontal dimension W, so a shape (W,) is enough for operation
@@ -1161,6 +1164,7 @@ class Operator():
             return self.cat(tensors, dim=0)
         else:
             return self.cat(tensors, dim=1)
+        
     
     def dstack(self, tensors: Tuple[Tensor]):
         """
@@ -1170,10 +1174,113 @@ class Operator():
             tensors (Tuple[Tensor]): Tuple of input tensors
 
         Returns:
-            Tensor: Output tensor with view of stacked initial tensors
+            Tensor: Tensor with view of stacked initial tensors
         """
 
         # we need to stack along the depth dimension D, so the tensors must have a shape at least (H, W, D)
         tensors = self.atleast_3d(*tensors)
 
         return self.cat(tuple(tensors), dim=2)
+    
+
+    def repeat(self, t: Tensor, dims: Tuple[int]):
+        """
+        Method for constructing a tensor by repeating specified dimensions of elemenst
+
+        Args:
+            t (Tensor): Input tensor
+            dims (Tuple[int]): Number of each dimension to be repeated
+
+        Returns:
+            Tensor: Tensor with repeated elements
+        """
+
+        out = Tensor(data=np.tile(t.data, reps=dims), requires_grad=t.requires_grad, _children=(t,))
+
+        def _backward(dims=dims):
+            if t.requires_grad:
+                shape = t.shape
+
+                if len(dims) >= t.ndim:
+                    shape = (1,) * (len(dims) - t.ndim) + t.shape  
+                else:
+                    dims = (1,) * (t.ndim - len(dims)) + dims
+
+                reshape = []
+
+                for d, r in zip(shape, dims):
+                    reshape.extend([r, d])
+
+                grad = np.reshape(out.grad, shape=reshape)
+
+                reduce_dims = tuple(range(0, len(reshape), 2))
+
+                t.grad += np.sum(grad, axis=reduce_dims, keepdims=False)
+
+        out._backward = _backward
+
+        return out
+    
+
+    def tile(self, t: Tensor, dims: Tuple[int]):
+        """
+        Method for constructing a tensor by repeating specified dimensions of elemenst
+
+        Args:
+            t (Tensor): Input tensor
+            dims (Tuple[int]): Number of times tensor values to be repeated along each dimension
+
+        Returns:
+            Tensor: Tensor with repeated elements
+        """
+
+        return self.repeat(t, dims)
+    
+
+    def repeat_interleave(self, t: Tensor, repeats, dim: int = 0):
+        """
+        Method for repeating elements of the input tensor
+
+        Args:
+            t (Tensor): Input tensor
+            repeats (int or Tuple[int]): The number of repetition for each element
+            dim (int): The dimension along which to repeat the elements
+
+        Returns:
+            Tensor: Tensor with repeated elements
+        """
+
+        out = Tensor(data=np.repeat(t.data, repeats, axis=dim), requires_grad=t.requires_grad, _children=(t,))
+
+        dim %= t.ndim
+
+        def _backward():
+            if t.requires_grad:
+                if isinstance(repeats, int):
+                    reshape = []
+
+                    for d in range(t.ndim):
+                        reshape.append(t.shape[d])
+
+                        if d == dim:
+                            reshape.append(repeats)
+
+                    grad = np.reshape(out.grad, shape=reshape)
+
+                    t.grad += np.sum(grad, axis=dim+1, keepdims=False)
+                else:
+                    start = 0
+                    stop = 0
+
+                    for repeat in repeats:
+                        stop += repeat
+                        slices = [slice(None)] * t.ndim
+                        slices[dim] = slice(start, stop)
+
+                        t.grad[tuple(slices)] += np.sum(out.grad[tuple(slices)], axis=dim, keepdims=True)
+
+                        start = stop
+
+        out._backward = _backward
+
+        return out
