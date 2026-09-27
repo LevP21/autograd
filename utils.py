@@ -1,8 +1,13 @@
+from typing import Tuple
+
 import numpy as np
 
 from tensor import Tensor
 
-def unbroadcast(grad: Tensor, shape):
+def unbroadcast(
+    grad: Tensor,
+    shape: Tuple[int, ...]
+):
     """
     Squeezes the shape of the input tensor to the specific shape
 

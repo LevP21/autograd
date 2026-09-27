@@ -1,4 +1,4 @@
-from typing import Tuple, Any
+from typing import Tuple, Any, List
 
 import numpy as np
 
@@ -7,115 +7,127 @@ from utils import unbroadcast
 
 def eg(
     self: Tensor,
-    other: Tensor
+    other: Any
 ) -> Tensor:
     """
     Operator of equality between two tensors
 
     Args:
         self (Tensor): First input tensor
-        other (Tensor): Second input tensor
+        other (Any): Second input tensor or other object that can be compared with a tensor
 
     Returns:
-        bool: Result of equality operation
+        Tensor: Result of equality operation
     """
 
-    return self.data == other.data
+    other = other if isinstance(other, Tensor) else Tensor(other)
+
+    return Tensor(self.data == other.data, requires_grad=False, _children=(self, other))
 
 Tensor.__eq__ = eg
 
 def ne(
     self: Tensor,
-    other: Tensor
+    other: Any
 ) -> Tensor:
     """
     Operator of inequality between two tensors
 
     Args:
         self (Tensor): First input tensor
-        other (Tensor): Second input tensor
+        other (Any): Second input tensor or other object that can be compared with a tensor
 
     Returns:
-        bool: Result of inequality operation
+        Tensor: Result of inequality operation
     """
 
-    return self.data != other.data
+    other = other if isinstance(other, Tensor) else Tensor(other)
+
+    return Tensor(self.data != other.data, requires_grad=False, _children=(self, other))
 
 Tensor.__ne__ = ne    
 
 def lt(
     self: Tensor,
-    other: Tensor
+    other: Any
 ) -> Tensor:
     """
     Operator of less than between two tensors
 
     Args:
         self (Tensor): First input tensor
-        other (Tensor): Second input tensor
+        other (Any): Second input tensor or other object that can be compared with a tensor
 
     Returns:
-        bool: Result of less than operation
+        Tensor: Result of less than operation
     """
 
-    return self.data < other.data
+    other = other if isinstance(other, Tensor) else Tensor(other)
+
+    return Tensor(self.data < other.data, requires_grad=False, _children=(self, other))
 
 Tensor.__lt__ = lt
 
 def le(
     self: Tensor,
-    other: Tensor
+    other: Any
 ) -> Tensor:
     """
     Operator of less than or equal to between two tensors
 
     Args:
         self (Tensor): First input tensor
-        other (Tensor): Second input tensor
+        other (Any): Second input tensor or other object that can be compared with a tensor
 
     Returns:
-        bool: Result of less than or equal to operation
+        Tensor: Result of less than or equal to operation
     """
 
-    return self.data <= other.data
+    other = other if isinstance(other, Tensor) else Tensor(other)
+
+    return Tensor(self.data <= other.data, requires_grad=False, _children=(self, other))
 
 Tensor.__le__ = le
 
 def gt(
     self: Tensor,
-    other: Tensor
+    other: Any
 ) -> Tensor:
     """
     Operator of greater than between two tensors
 
     Args:
         self (Tensor): First input tensor
-        other (Tensor): Second input tensor
+        other (Any): Second input tensor or other object that can be compared with a tensor
 
     Returns:
-        bool: Result of greater than operation
+        Tensor: Result of greater than operation
     """
 
-    return self.data > other.data
+    other = other if isinstance(other, Tensor) else Tensor(other)
+
+    return Tensor(self.data > other.data, requires_grad=False, _children=(self, other))
 
 Tensor.__gt__ = gt
 
 def ge(
     self: Tensor,
-    other: Tensor
+    other: Any
 ) -> Tensor:
     """
     Operator of greater than or equal to between two tensors
 
     Args:
         self (Tensor): First input tensor
-        other (Tensor): Second input tensor
+        other (Any): Second input tensor or other object that can be compared with a tensor
 
     Returns:
-        bool: Result of greater than or equal to operation
+        Tensor: Result of greater than or equal to operation
     """
 
-    return self.data >= other.data
+    other = other if isinstance(other, Tensor) else Tensor(other)
+
+    return Tensor(self.data >= other.data, requires_grad=False, _children=(self, other))
 
 Tensor.__ge__ = ge
 
@@ -864,26 +876,26 @@ def moveaxis(
 
 def permute(
     t: Tensor,
-    *axes: int
+    *dims: int
 ) -> Tensor:
     """
-    Method for changing order of axes of the input tensor
+    Method for changing order of dimensions of the input tensor
 
     Args:
         t (Tensor): Input tensor
-        axes (Tuple[int]): Order of the axes of the input tensor the output tensor needs to be with
+        dims (Sequense of int): Order of the dimensions of the input tensor the output tensor needs to be with
 
     Returns:
-        Tensor: Tensor with changed order of axes
+        Tensor: Tensor with changed order of dimensions
     """
 
-    out = Tensor(np.transpose(t.data, axes), requires_grad=t.requires_grad, _children=(t,))
+    out = Tensor(np.transpose(t.data, dims), requires_grad=t.requires_grad, _children=(t,))
 
     def _backward():
-        # during backward we need to transpose the gradient of the output tensor into the axes order of the input tensor
+        # during backward we need to transpose the gradient of the output tensor into the dims order of the input tensor
         if t.requires_grad:
-            reversed_axes = np.argsort(axes)
-            t.grad += np.transpose(out.grad, reversed_axes)
+            reversed_dims = np.argsort(dims)
+            t.grad += np.transpose(out.grad, reversed_dims)
 
     out._backward = _backward
 
@@ -971,20 +983,20 @@ def expand(
 
 def squeeze(
     t: Tensor,
-    axis: Tuple[int] = None
+    dim: Tuple[int] = None
 ) -> Tensor:
     """
-    Method for removing axes of length 1 from the input tensor
+    Method for removing dimensions of length 1 from the input tensor
 
     Args:
         t (Tensor): Input tensor
-        axis (None or int or Tuple[int]): Axes with lenght 1 which need to be removed from the input tensor
+        dim (None or int or Tuple[int]): Dimensions with lenght 1 which need to be removed from the input tensor
 
     Returns:
-        Tensor: Tensor with removed axes
+        Tensor: Tensor with removed dimensions
     """
 
-    out = Tensor(np.squeeze(t.data, axis=axis), requires_grad=t.requires_grad, _children=(t,))
+    out = Tensor(np.squeeze(t.data, axis=dim), requires_grad=t.requires_grad, _children=(t,))
 
     def _backward():
         if t.requires_grad:
@@ -997,20 +1009,20 @@ def squeeze(
 
 def unsqueeze(
     t: Tensor,
-    axis: Tuple[int]
+    dim: Tuple[int]
 ) -> Tensor:
     """
     Method for adding new dimensions to the input tensor
 
     Args:
         t (Tensor): Input tensor
-        axis (int or Tuple[int]): Positions where the new axes will be added
+        dim (int or Tuple[int]): Positions where the new dimensions will be added
 
     Returns:
-        Tensor: Tensor with added axes
+        Tensor: Tensor with added dimensions
     """
 
-    out = Tensor(np.expand_dims(t.data, axis=axis), requires_grad=t.requires_grad, _children=(t,))
+    out = Tensor(np.expand_dims(t.data, axis=dim), requires_grad=t.requires_grad, _children=(t,))
 
     def _backward():
         if t.requires_grad:
@@ -1023,7 +1035,7 @@ def unsqueeze(
 
 def split(
     t: Tensor,
-    split_size_or_sections: Tuple[int],
+    split_size_or_sections: List[int],
     dim: int = 0
 ) -> Tuple[Tensor]:
     """
@@ -1031,7 +1043,7 @@ def split(
 
     Args:
         t (Tensor): Input tensor
-        split_size_or_sections (int or Tuple[int]): Size of every chunk for splitting or range of sizes for all chunks
+        split_size_or_sections (int or List[int]): Size of every chunk for splitting or range of sizes for all chunks
         dim (int): Dimension the tensor is being splitted along
 
     Returns:
@@ -1048,6 +1060,9 @@ def split(
     chunks = []
 
     if isinstance(split_size_or_sections, int):
+        if split_size_or_sections <= 0:
+            raise ValueError("split size must be positive")
+        
         start = 0
 
         while start < t.shape[dim]:
@@ -1068,6 +1083,8 @@ def split(
 
             start = stop
     else:
+        if any(size <= 0 for size in split_size_or_sections):
+            raise ValueError("split size must be positive")
         if np.sum(split_size_or_sections) != t.shape[dim]:
             raise ValueError("sum of sections must match the size of dimension")
 
@@ -1135,7 +1152,7 @@ def atleast_1d(*tensors: Tensor) -> Tuple[Tensor]:
 
     for tensor in tensors:
         if tensor.ndim < 1:
-            tensor = unsqueeze(tensor, axis=0)
+            tensor = unsqueeze(tensor, dim=0)
 
         atleast_1d_tensors.append(tensor)
 
@@ -1159,7 +1176,7 @@ def atleast_2d(*tensors: Tensor) -> Tuple[Tensor]:
 
     for tensor in tensors:
         if tensor.ndim == 1:
-            tensor = unsqueeze(tensor, axis=0)
+            tensor = unsqueeze(tensor, dim=0)
 
         atleast_2d_tensors.append(tensor)
 
@@ -1183,7 +1200,7 @@ def atleast_3d(*tensors: Tensor) -> Tuple[Tensor]:
 
     for tensor in tensors:
         if tensor.ndim == 2:
-            tensor = unsqueeze(tensor, axis=-1)
+            tensor = unsqueeze(tensor, dim=-1)
 
         atleast_3d_tensors.append(tensor)
 
@@ -1246,7 +1263,7 @@ def stack(
         Tensor: Tensor with view of stacked initial tensors
     """
 
-    unsqueezed_tensors = tuple(unsqueeze(tensor, axis=dim) for tensor in tensors)
+    unsqueezed_tensors = tuple(unsqueeze(tensor, dim=dim) for tensor in tensors)
 
     return cat(unsqueezed_tensors, dim)
 
@@ -1307,33 +1324,33 @@ def dstack(tensors: Tuple[Tensor]) -> Tensor:
 
 def repeat(
     t: Tensor,
-    dims: Tuple[int]
+    repeats: Tuple[int]
 ) -> Tensor:
     """
     Method for constructing a tensor by repeating specified dimensions of elemenst
 
     Args:
         t (Tensor): Input tensor
-        dims (Tuple[int]): Number of each dimension to be repeated
+        repeats (Tuple[int]): Number of each dimension to be repeated
 
     Returns:
         Tensor: Tensor with repeated elements
     """
 
-    out = Tensor(data=np.tile(t.data, reps=dims), requires_grad=t.requires_grad, _children=(t,))
+    out = Tensor(data=np.tile(t.data, reps=repeats), requires_grad=t.requires_grad, _children=(t,))
 
-    def _backward(dims=dims):
+    def _backward(repeats=repeats):
         if t.requires_grad:
             shape = t.shape
 
-            if len(dims) >= t.ndim:
-                shape = (1,) * (len(dims) - t.ndim) + t.shape  
+            if len(repeats) >= t.ndim:
+                shape = (1,) * (len(repeats) - t.ndim) + t.shape  
             else:
-                dims = (1,) * (t.ndim - len(dims)) + dims
+                repeats = (1,) * (t.ndim - len(repeats)) + repeats
 
             reshape = []
 
-            for d, r in zip(shape, dims):
+            for d, r in zip(shape, repeats):
                 reshape.extend([r, d])
 
             grad = np.reshape(out.grad, shape=reshape)
@@ -1368,7 +1385,7 @@ def tile(
 def repeat_interleave(
     t: Tensor,
     repeats: Tuple[int],
-    dim: int = 0
+    dim: int | None = None
 ) -> Tensor:
     """
     Method for repeating elements of the input tensor
@@ -1376,7 +1393,7 @@ def repeat_interleave(
     Args:
         t (Tensor): Input tensor
         repeats (int or Tuple[int]): The number of repetition for each element
-        dim (int): The dimension along which to repeat the elements
+        dim (int, optional): The dimension along which to repeat the elements
 
     Returns:
         Tensor: Tensor with repeated elements
@@ -1384,7 +1401,10 @@ def repeat_interleave(
 
     out = Tensor(data=np.repeat(t.data, repeats, axis=dim), requires_grad=t.requires_grad, _children=(t,))
 
-    dim %= t.ndim
+    if not dim:
+        dim = 0
+    else:
+        dim %= t.ndim
 
     def _backward():
         if t.requires_grad:

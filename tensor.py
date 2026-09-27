@@ -1,3 +1,5 @@
+from typing import Tuple, Self
+
 import numpy as np
 
 class Tensor:
@@ -19,6 +21,7 @@ class Tensor:
             data (List[float]): Array for tensor falue
             requires_grad (bool): Whether gradient computation for this tensor is required or not
             _children (Tuple(Tensor)): Children tensors for topological graph building
+            copy (bool): Flag for copying data if it is already numpy array
         
         Returns:
             out (Tensor): Initialized tensor with set parameters
@@ -32,34 +35,82 @@ class Tensor:
         self.grad = np.zeros_like(self.data)
         self.requires_grad = requires_grad
 
-        # reinitializations of bacis methods using numpy array value
-        self.shape = self.data.shape
-        self.T = self.data.T
-        self.ndim = self.data.ndim
-
         self._backward = lambda: None
         self._previous = set(_children)
 
         self.__array_priority__ = 1000
 
+
+    @property
+    def ndim(self) -> int:
+        """
+        Number of dimensions of the tensor
+        """
+
+        return self.data.ndim
+
+
+    @property
+    def shape(self) -> Tuple[int]:
+        """
+        Shape of the tensor
+        """
+
+        return self.data.shape
+
+
+    @property
+    def dtype(self) -> np.dtype:
+        """
+        Dtype of tensor values
+        """
+        
+        return self.data.dtype
+
+
+    @property
+    def numel(self) -> int:
+        """
+        Length of the current view of tensor in elements
+        """
+
+        return int(np.prod(self.data))
+
+    @property
+    def size(
+        self,
+        dim: int | None = None
+    ) -> Tuple[int] | int:
+        """
+        Size of a particular dimension or the shape of the current view
+
+        Args:
+            dim (int or None): Dimension which size to return
+        """
+
+        return self.data.size(dim)
+
     
     def item(self):
         """
-        Method for receiving value from tensor
+        Takes scalar value from the tensor with one element
 
         Args:
             None
-
+        
         Returns:
-            Numpy value from the tensor
+            Scalar: Scalar value from the tensor
         """
 
-        return self.data
+        if self.numel != 1:
+            raise ValueError(f"a tensor with {self.numel} elements cannot be converted to scalar")
+
+        return self.data[(0,) * self.ndim]
 
 
     def __hash__(self):
         """
-        Compute identity of a tensor
+        Computes identity of a tensor
 
         Args:
             None
@@ -73,7 +124,7 @@ class Tensor:
 
     def __len__(self):
         """
-        Return length of a tensor
+        Returns length of a tensor
 
         Args:
             None
@@ -87,7 +138,7 @@ class Tensor:
 
     def is_contiguous(self):
         """
-        Identify if the tensor has a contiguous area in memory
+        Identifies if the tensor has a contiguous area in memory
 
         Args:
             None
@@ -132,12 +183,11 @@ class Tensor:
             tensor._backward()
 
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         """
         Custom representation for better print
 
-        Format: "Tensor(Data=data
-                Grad=grad)"
+        Format: Data numpy view
 
         Args:
             None
@@ -146,4 +196,4 @@ class Tensor:
             None
         """
 
-        return f"Tensor(Data={self.data}\nGrad={self.grad})"
+        return f"{self.data}"
