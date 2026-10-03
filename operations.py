@@ -643,7 +643,7 @@ def view(
 
     Args:
         t (Tensor): Input tensor
-        shape (Tuple[int]): Shape the input tensor needs to be fit in
+        shape (Sequence of int): Shape the input tensor needs to be fit in
     
     Returns:
         Tensor: Tensor with changed shape
@@ -692,7 +692,7 @@ def reshape(
 
     Args:
         t (Tensor): Input tensor
-        shape (Tuple[int]): Shape the input tensor needs to be fit in
+        shape (Sequence of int): Shape the input tensor needs to be fit in
     
     Returns:
         Tensor: Tensor with changed shape
@@ -883,7 +883,7 @@ def permute(
 
     Args:
         t (Tensor): Input tensor
-        dims (Sequense of int): Order of the dimensions of the input tensor the output tensor needs to be with
+        dims (Sequence of int): Order of the dimensions of the input tensor the output tensor needs to be with
 
     Returns:
         Tensor: Tensor with changed order of dimensions
@@ -935,7 +935,7 @@ def unflatten(
     Args:
         t (Tensor): Input tensor
         dim (int): Dimension to unflatten
-        sizes (Tuple[int]): Shape the dimension needs to be fit in
+        sizes (Sequence of int): Shape the dimension needs to be fit in
 
     Returns:
         Tensor: Output tensor with new shape
@@ -963,7 +963,7 @@ def expand(
 
     Args:
         t (Tensor): Input tensor
-        shape (Tuple[int]): Shape the input tensor needs to be expanded to
+        shape (Sequence of int): Shape the input tensor needs to be expanded to
 
     Returns:
         Tensor: Tensor with expanded shape
@@ -979,6 +979,42 @@ def expand(
     out._backward = _backward
 
     return out
+
+
+def expand_as(
+    t1: Tensor,
+    t2: Tensor
+) -> Tensor:
+    """
+    Method for changing the first input tensor into a larger shape of the second input tensor
+
+    Args:
+        t1 (Tensor): First input tensor
+        t2 (Tensor): Second input tensor
+    
+    Returns:
+        Tensor: Tensor with expanded shape
+    """
+
+    return expand(t1, t2.shape)
+
+
+def broadcast_to(
+    t: Tensor,
+    *shape: int
+) -> Tensor:
+    """
+    Method for changing the input tensor to a larger shape
+
+    Args:
+        t (Tensor): Input tensor
+        shape (Sequence of int): Shape the input tensor needs to be broadcasted to
+
+    Returns:
+        Tensor: Tensor with broadcasted shape
+    """
+
+    return expand(t, shape)
 
 
 def squeeze(
@@ -1142,7 +1178,7 @@ def atleast_1d(*tensors: Tensor) -> Tuple[Tensor]:
     Method for reshaping tensor into at least one-dimensional tensor. If tensor has 1 or more dimensions, doesn't change an initial tensor
 
     Args:
-        tensors (Tensor or Sequense of Tensor): Input tensors
+        tensors (Tensor or Sequence of Tensor): Input tensors
 
     Returns:
         (Tuple[Tensor]): Tensors with at least one dimension
@@ -1164,7 +1200,7 @@ def atleast_2d(*tensors: Tensor) -> Tuple[Tensor]:
     Method for reshaping tensor into at least two-dimensional tensor. If tensor has 2 or more dimensions, doesn't change an initial tensor
 
     Args:
-        tensors (Tensor or Sequense of Tensor): Input tensors
+        tensors (Tensor or Sequence of Tensor): Input tensors
 
     Returns:
         (Tuple[Tensor]): Tensors with at least two dimensions
@@ -1188,7 +1224,7 @@ def atleast_3d(*tensors: Tensor) -> Tuple[Tensor]:
     Method for reshaping tensor into at least three-dimensional tensor. If tensor has 3 or more dimensions, doesn't change an initial tensor
 
     Args:
-        tensors (Tensor or Sequense of Tensor): Input tensors
+        tensors (Tensor or Sequence of Tensor): Input tensors
 
     Returns:
         (Tuple[Tensor]): Tensors with at least three dimensions
