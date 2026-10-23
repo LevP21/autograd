@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from typing import Tuple, Self
 
 import numpy as np
@@ -12,6 +14,7 @@ class Tensor:
         data,
         requires_grad: bool = False,
         _children: set = (),
+        dtype: np.dtype = np.float32,
         copy: bool = False
     ):
         """
@@ -21,6 +24,7 @@ class Tensor:
             data (List[float]): Array for tensor falue
             requires_grad (bool): Whether gradient computation for this tensor is required or not
             _children (Tuple(Tensor)): Children tensors for topological graph building
+            dtype (np.dtype): Type of tensor elements
             copy (bool): Flag for copying data if it is already numpy array
         
         Returns:
@@ -28,9 +32,9 @@ class Tensor:
         """
 
         if copy:
-            self.data = np.array(data, dtype=np.float32)
+            self.data = np.array(data, dtype=dtype)
         else:
-            self.data = np.asarray(data, dtype=np.float32)
+            self.data = np.asarray(data, dtype=dtype)
     
         self.grad = np.zeros_like(self.data)
         self.requires_grad = requires_grad
