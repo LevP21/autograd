@@ -3,7 +3,7 @@ from typing import Tuple, Any, List
 import numpy as np
 
 from tensor import Tensor
-from utils import unbroadcast
+from utils import *
 
 def eg(
     self: Tensor,
@@ -147,7 +147,7 @@ def add(
     """
 
     other = other if isinstance(other, Tensor) else Tensor(other)
-    out = Tensor(self.data + other.data, requires_grad=self.requires_grad or other.requires_grad, _children=(self, other))
+    out = Tensor(self.data + other.data, requires_grad=(self.requires_grad or other.requires_grad), _children=(self, other))
 
     def _backward():
         # the unbroadcast squeezes the shape of output tensor to the shape of input tensor in case shapes are different after the function
@@ -265,7 +265,7 @@ def mul(
     """
 
     other = other if isinstance(other, Tensor) else Tensor(other)
-    out = Tensor(self.data * other.data, requires_grad=self.requires_grad or other.requires_grad, _children=(self, other))
+    out = Tensor(self.data * other.data, requires_grad=(self.requires_grad or other.requires_grad), _children=(self, other))
 
     def _backward():
         if self.requires_grad:
@@ -317,7 +317,7 @@ def pow(
 
     other = other if isinstance(other, Tensor) else Tensor(other)
 
-    out = Tensor(self.data**other.data, requires_grad=self.requires_grad or other.requires_grad, _children=(self, other))
+    out = Tensor(self.data**other.data, requires_grad=(self.requires_grad or other.requires_grad), _children=(self, other))
 
     def _backward():
         # tabular derivative: d((x)^pow) = pow * x^(pow-1)
@@ -409,7 +409,7 @@ def matmul(
         Tensor: Tensor with the after the matrix multiplication
     """
 
-    out = Tensor(self.data @ other.data, requires_grad=self.requires_grad or other.requires_grad, _children=(self, other))
+    out = Tensor(self.data @ other.data, requires_grad=(self.requires_grad or other.requires_grad), _children=(self, other))
 
     """
     Matrix gradients:
@@ -814,9 +814,7 @@ def movedim(
         destination = (destination,)
 
     if len(source) != len(destination):
-        raise ValueError(
-            "source and destination must have the same number of dimensions"
-        )
+        raise ValueError("source and destination must have the same number of dimensions")
     
     source_norm = []
     destination_norm = []
@@ -829,14 +827,10 @@ def movedim(
         destination_norm.append(d % ndim)
 
     if len(source_norm) != len(set(source_norm)):
-        raise ValueError(
-            "source must not have the repeated indices"
-        )
+        raise ValueError("source must not have the repeated indices")
     
     if len(destination_norm) != len(set(destination_norm)):
-        raise ValueError(
-            "destination must not have the repeated indices"
-        )
+        raise ValueError("destination must not have the repeated indices")
 
     remaining = [i for i in range(ndim) if i not in source]
 
@@ -1470,5 +1464,415 @@ def repeat_interleave(
                     start = stop
 
     out._backward = _backward
+
+    return out
+
+
+def clone(
+    t: Tensor
+) -> Tensor:
+    """
+    Method for cloning a tensor
+
+    Args:
+        t (Tensor): Input tensor to clone
+
+    Returns:
+        Tensor: Cloned tensor
+    """
+
+    out = Tensor(data=t.data, requires_grad=t.requires_grad, _children=(t,), copy=True)
+
+    def _backward():
+        if t.requires_grad:
+            t.grad += out.grad
+
+    out._backward = _backward
+
+    return out
+
+
+def type(
+    t: Tensor,
+    dtype: np.dtype | None = None
+) -> np.dtype | Tensor:
+    """
+    Method for casting a tensor into necessary type
+
+    Args:
+        t (Tensor): Input tensor
+        dtype(np.dtype, optional): Type for casting tensor
+
+    Returns:
+        Tensor: Tensor with necessary type
+    """
+    
+    if dtype:
+        if dtype in (np.float16, np.float32, np.float64):
+            out = Tensor(
+                data=t.data.astype(dtype),
+                requires_grad=t.requires_grad,
+                _children=(t,),
+                dtype=dtype
+            )
+
+            def _backward():
+                if t.requires_grad:
+                    t.grad += out.grad.astype(t.dtype)
+
+            out._backward = _backward
+        else:
+            out = Tensor(
+                data=t.data.astype(dtype),
+                requires_grad=False,
+                _children=(t,),
+                dtype=dtype
+            )
+
+        return out
+    else:
+        return t.dtype
+
+
+def gather(
+    t: Tensor,
+    dim: int,
+    index: Tensor
+) -> Tensor:
+    """
+    Method for gathering values from input tensor along the particular dimension using indices from index tensor
+
+    Args:
+        t (Tensor): Input tensor
+        dim (int): Dimension along which values are gathered
+        index (Tensor): Tensor with indices for gathering
+
+    Returns:
+        Tensor: Tensor with values gathered along the dimension according to indices
+    """
+
+    if not isinstance(index, Tensor):
+        index = Tensor(index, dtype=np.int32)
+
+    if t.ndim != index.ndim:
+        raise ValueError("input tensor and index tensor must have the same number of dimensions")
+
+    if index.dtype not in (np.int8, np.int16, np.int32, np.int64):
+        index = type(index, np.int32)
+    
+    out = Tensor(
+        data=np.take_along_axis(t.data, index.data, axis=dim),
+        requires_grad=t.requires_grad,
+        _children=(t,)
+    )
+
+    def _backward():
+        if t.requires_grad:
+            coords = list(np.indices(index.shape, sparse=True))
+            coords[dim] = index.data
+            flat_indices = np.ravel_multi_index(
+                tuple(coords),
+                t.shape,
+            )
+
+            np.add.at(
+                t.grad.ravel(),
+                flat_indices.ravel(),
+                out.grad.ravel(),
+            )
+
+    out._backward = _backward
+
+    return out
+
+
+def scatter(
+    target: Tensor,
+    dim: int,
+    src: Tensor,
+    index: Tensor
+) -> Tensor:
+    """
+    Method for putting values from source tensor to target tensor along the particular dimension using indices from index tensor
+
+    Args:
+        target (Tensor): Input tensor to which put values
+        dim (int): Dimension along which values are put
+        src (Tensor): Tensor with values to put
+        index (Tensor): Tensor with indices for putting
+
+    Returns:
+        Tensor: Tensor with values put along the dimension according to indices
+    """
+
+    if not isinstance(index, Tensor):
+        index = Tensor(index, dtype=np.int32)
+    
+    if target.ndim != index.ndim:
+        raise ValueError("target tensor and index tensor must have the same number of dimensions")
+
+    if src.ndim != index.ndim:
+        raise ValueError("source tensor and index tensor must have the same number of dimensions")
+
+    if index.dtype not in (np.int8, np.int16, np.int32, np.int64):
+        index = type(index, np.int32)
+
+    if has_duplicates_along_axis(array=index.data, axis=dim):
+        raise ValueError("index cannot contain identical indices along target dimension")
+
+    target_clone = clone(target)
+
+    np.put_along_axis(target_clone.data, index.data, src.data, axis=dim)
+
+    out = Tensor(
+        data=target_clone.data,
+        requires_grad=(target_clone.requires_grad or src.requires_grad),
+        _children=(target_clone, src)
+    )
+
+    def _backward():
+        if target_clone.requires_grad:
+            overwritten = np.zeros(out.grad.shape, dtype=bool)
+            np.put_along_axis(overwritten, index.data, True, axis=dim)
+            not_overwritten = ~overwritten
+
+            target_clone.grad[not_overwritten] += out.grad[not_overwritten]
+        if src.requires_grad:
+            src.grad += np.take_along_axis(out.grad, index.data, axis=dim)
+
+    out._backward = _backward
+
+    return out
+
+
+def scatter_add(
+    target: Tensor,
+    dim: int,
+    src: Tensor,
+    index: Tensor
+) -> Tensor:
+    """
+    Method for adding values from source tensor to target tensor along the particular dimension using indices from index tensor
+
+    Args:
+        target (Tensor): Input tensor to which add values
+        dim (int): Dimension along which values are added
+        src (Tensor): Tensor with values to add
+        index (Tensor): Tensor with indices for adding
+
+    Returns:
+        Tensor: Tensor with values summed along the dimension according to indices
+    """
+
+    if not isinstance(index, Tensor):
+        index = Tensor(index, dtype=np.int32)
+
+    if target.ndim != index.ndim:
+        raise ValueError("target tensor and index tensor must have the same number of dimensions")
+
+    if src.ndim != index.ndim:
+        raise ValueError("source tensor and index tensor must have the same number of dimensions")
+
+    if index.dtype not in (np.int8, np.int16, np.int32, np.int64):
+        index = type(index, np.int32)
+
+    coords = list(np.indices(index.shape, sparse=True))
+    coords[dim] = index.data
+    flat_indices = np.ravel_multi_index(
+        tuple(coords),
+        target.shape,
+    )
+
+    target_clone = clone(target)
+
+    np.add.at(
+        target_clone.data.ravel(),
+        flat_indices.ravel(),
+        src.data.ravel(),
+    )
+
+    out = Tensor(
+        data=target_clone.data,
+        requires_grad=(target_clone.requires_grad or src.requires_grad),
+        _children=(target_clone, src)
+    )
+
+    def _backward():
+        if target_clone.requires_grad:
+            target_clone.grad += out.grad
+
+        if src.requires_grad:
+            src.grad += np.take_along_axis(out.grad, index.data, axis=dim)
+
+    out._backward = _backward
+
+    return out
+
+
+def index_select(
+    t: Tensor,
+    dim: int,
+    index: Tensor
+) -> Tensor:
+    """
+    Method for taking values from input tensor along the particular dimension using indices from index tensor
+
+    Args:
+        t (Tensor): Input tensor
+        dim (int): Dimension along which values are taken
+        index (Tensor): Tensor with indices for taking values
+
+    Returns:
+        Tensor: Tensor with values taken along the dimension according to indices
+    """
+
+    if not isinstance(index, Tensor):
+        index = Tensor(index, dtype=np.int32)
+
+    if index.dtype not in (np.int8, np.int16, np.int32, np.int64):
+        index = type(index, np.int32)
+
+    if index.ndim > 1:
+        raise ValueError("index tensor must have 1 or less dimensions")
+
+    if not (-t.ndim <= dim < t.ndim):
+        raise IndexError("index out of range")
+        
+    dim %= t.ndim
+
+    indices = tuple(index.data if i == dim else slice(None) for i in range(t.ndim))
+
+    out = Tensor(data=t.data[indices], requires_grad=t.requires_grad, _children=(t,))
+
+    def _backward():
+        if t.requires_grad:
+            if index.ndim > 0:
+                index_coefficients = element_counts_along_axis(index.data, axis=0)
+            else:
+                index_coefficients = 1
+
+            t.grad[indices] += out.grad * index_coefficients
+
+    out._backward = _backward
+
+    return out
+
+
+def take(
+    t: Tensor,
+    index: Tensor
+):
+    """
+    Method for taking values from input tensor viewed as a 1-D tensor using indices from index tensor
+    
+    Args:
+        t (Tensor): Input tensor
+        index (Tensor): Tensor with indices for taking values
+
+    Returns:
+        Tensor: Tensor with values taken according to indices
+    """
+
+    if not isinstance(index, Tensor):
+        index = Tensor(index, dtype=np.int32)
+
+    if index.dtype not in (np.int8, np.int16, np.int32, np.int64):
+        index = type(index, np.int32)
+
+    index_raveled = index.data.ravel()
+
+    flattened_data = t.data.ravel()[index_raveled]
+
+    out = Tensor(
+        data=np.reshape(flattened_data, index.shape),
+        requires_grad=t.requires_grad,
+        _children=(t,)
+    )
+
+    def _backward():
+        if t.requires_grad:
+            if index.ndim > 0:
+                index_coefficients = element_counts_along_axis(index_raveled, axis=0)
+            else:
+                index_coefficients = 1
+
+            grad_flattened = t.grad.ravel()
+            grad_flattened[index_raveled] += out.grad.ravel() * index_coefficients
+
+            t.grad = np.reshape(grad_flattened, t.shape)
+
+    out._backward = _backward
+
+    return out
+
+
+def masked_select (
+    t: Tensor,
+    mask: Tensor
+) -> Tensor:
+    """
+    Method for taking values from input tensor using boolean mask tensor
+    
+    Args:
+        t (Tensor): Input tensor
+        mask (Tensor): Tensor with bool values for taking values
+
+    Returns:
+        Tensor: Tensor with values taken according to mask
+    """
+
+    if not isinstance(mask, Tensor):
+        mask = Tensor(mask, dtype=np.bool)
+
+    if mask.dtype != bool:
+        mask = type(mask, bool)
+
+    if mask.shape != t.shape:
+        mask_raveled = np.broadcast_to(mask.data, t.shape).ravel()
+    else:
+        mask_raveled = mask.data.ravel()
+
+    out = Tensor(data=t.data.ravel()[mask_raveled], requires_grad=t.requires_grad, _children=(t,))
+
+    def _backward():
+        if t.requires_grad:
+            grad_flattened = t.grad.ravel()
+            grad_flattened[mask_raveled] += out.grad.ravel()
+
+            t.grad = np.reshape(grad_flattened, t.shape)
+
+    out._backward = _backward
+
+    return out
+
+
+def nonzero(
+    t: Tensor,
+    as_tuple: bool = False
+) -> Tuple[Tensor] | Tensor:
+    """
+    Method for finding indices of nonzero values in input tensor
+
+    Args:
+        t (Tensor): Input tensor
+        as_tuple: If False the output tensor contains indices. If True the output is tuple with one 1-D tensor for each dimension, containing the indices of each nonzero element along that dimension.
+
+    
+    Returns:
+        Tensor or Tuple[Tensor]: Output tensor or tuple of tensors with indices of nonzero values
+    """
+
+    if as_tuple:
+        out = tuple(
+            Tensor(data=data, requires_grad=False, _children=(t,), dtype=np.int32)
+            for data in np.nonzero(t.data)
+        )
+    else:
+        out = Tensor(
+            data=np.stack(np.nonzero(t.data), axis=1),
+            requires_grad=False,
+            _children=(t,),
+            dtype=np.int32
+        )
 
     return out
